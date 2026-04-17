@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/auto-apply",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/daily-report",
+      "schedule": "0 20 * * *"
+    }
+  ]
+}

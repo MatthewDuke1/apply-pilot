@@ -54,4 +54,42 @@ export interface Application {
   referral_contact?: Connection;
   cover_letter?: string;
   resume_version?: string;
+  auto_applied?: boolean;
+}
+
+export interface AutoApplyConfig {
+  id?: string;
+  enabled: boolean;
+  daily_limit: number;
+  min_match_score: number;
+  search_queries: string[];
+  location: string;
+  report_email: string;
+  resume_text: string;
+  resume_name: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AutoApplyRun {
+  id?: string;
+  started_at: string;
+  completed_at?: string;
+  jobs_searched: number;
+  jobs_matched: number;
+  jobs_applied: number;
+  jobs_skipped_ghost: number;
+  jobs_skipped_score: number;
+  jobs_skipped_duplicate: number;
+  errors: string[];
+  applications: AutoAppliedJob[];
+}
+
+export interface AutoAppliedJob {
+  job: Job;
+  match_score: number;
+  match_reasons: string[];
+  cover_letter: string;
+  applied_at: string;
+  career_page_url: string;
 }

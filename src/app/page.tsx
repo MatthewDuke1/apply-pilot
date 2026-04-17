@@ -69,6 +69,18 @@ export default function DashboardPage() {
         </>
       )}
 
+      <div className="bg-brand-50 border border-brand-200 rounded-xl p-5">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-bold text-brand-800 text-sm">Auto-Apply</h3>
+          <a href="/settings" className="text-xs text-brand-600 hover:underline">Configure</a>
+        </div>
+        <p className="text-xs text-brand-700">
+          Set up automated daily job applications. ApplyPilot searches for new jobs matching your resume,
+          prioritizes the freshest postings, filters out ghost jobs, generates tailored cover letters,
+          and sends you a daily report.
+        </p>
+      </div>
+
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
         <h3 className="font-bold text-amber-800 text-sm mb-2">Why ApplyPilot?</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-amber-700">

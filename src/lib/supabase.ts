@@ -10,4 +10,7 @@ export const TABLES = {
   jobs: "ap_jobs",
   applications: "ap_applications",
   connections: "ap_connections",
+  auto_apply_config: "ap_auto_apply_config",
+  auto_apply_runs: "ap_auto_apply_runs",
+  auto_applied_jobs: "ap_auto_applied_jobs",
 } as const;

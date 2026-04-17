@@ -18,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/jobs" className="hover:text-brand-600">Find Jobs</a>
               <a href="/applications" className="hover:text-brand-600">Applications</a>
               <a href="/connections" className="hover:text-brand-600">Network</a>
+              <a href="/settings" className="hover:text-brand-600">Auto-Apply</a>
             </div>
           </div>
         </nav>
