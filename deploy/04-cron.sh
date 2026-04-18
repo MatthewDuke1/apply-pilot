@@ -25,26 +25,29 @@ APP_URL="${APP_URL%/}"
 CRON_SECRET=$(aws ssm get-parameter --name "/apply-pilot/CRON_SECRET" --with-decryption --region "$REGION" --query 'Parameter.Value' --output text)
 
 # ── IAM role for EventBridge to invoke HTTP targets via Connections ──
-ROLE_NAME="EventBridgeSchedulerRole-apply-pilot"
-if ! aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
-  aws iam create-role --role-name "$ROLE_NAME" --assume-role-policy-document '{
+ROLE_NAME="EventBridgeRulesRole-apply-pilot"
+TRUST_POLICY='{
     "Version": "2012-10-17",
     "Statement": [{
       "Effect": "Allow",
-      "Principal": {"Service": "scheduler.amazonaws.com"},
+      "Principal": {"Service": "events.amazonaws.com"},
       "Action": "sts:AssumeRole"
     }]
-  }' >/dev/null
-  aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "InvokeApiDestination" --policy-document "{
+}'
+if ! aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+  aws iam create-role --role-name "$ROLE_NAME" --assume-role-policy-document "$TRUST_POLICY" >/dev/null
+else
+  aws iam update-assume-role-policy --role-name "$ROLE_NAME" --policy-document "$TRUST_POLICY"
+fi
+aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name "InvokeApiDestination" --policy-document "{
     \"Version\": \"2012-10-17\",
     \"Statement\": [{
       \"Effect\": \"Allow\",
       \"Action\": [\"events:InvokeApiDestination\"],
       \"Resource\": \"arn:aws:events:$REGION:$ACCOUNT_ID:api-destination/apply-pilot-*\"
     }]
-  }"
-  sleep 8
-fi
+}"
+sleep 3
 ROLE_ARN=$(aws iam get-role --role-name "$ROLE_NAME" --query 'Role.Arn' --output text)
 
 # ── EventBridge Connection (holds the bearer token) ──
@@ -88,32 +91,34 @@ create_destination() {
 AUTO_APPLY_ARN=$(create_destination "apply-pilot-auto-apply" "/api/cron/auto-apply")
 DAILY_REPORT_ARN=$(create_destination "apply-pilot-daily-report" "/api/cron/daily-report")
 
-# ── Scheduler schedules ──
-create_schedule() {
+# ── EventBridge Rules (cron) ──
+# Note: cron(...) expressions in EventBridge are always UTC. Convert CT → UTC.
+# 6 AM CT  → 12:00 UTC (11:00 during DST; we pick the standard-time UTC hour)
+# 8 PM CT  → 02:00 UTC next day (01:00 during DST)
+create_rule() {
   local name="$1" cron="$2" target_arn="$3"
-  local input='{}'
-  local cmd="create-schedule"
-  aws scheduler get-schedule --name "$name" --region "$REGION" >/dev/null 2>&1 && cmd="update-schedule"
-
-  aws scheduler $cmd \
+  aws events put-rule \
     --name "$name" \
     --schedule-expression "$cron" \
-    --schedule-expression-timezone "America/Chicago" \
-    --flexible-time-window '{"Mode":"OFF"}' \
-    --target "{\"Arn\":\"$target_arn\",\"RoleArn\":\"$ROLE_ARN\",\"Input\":\"$input\"}" \
+    --state ENABLED \
+    --region "$REGION" >/dev/null
+  aws events put-targets \
+    --rule "$name" \
+    --targets "[{\"Id\":\"1\",\"Arn\":\"$target_arn\",\"RoleArn\":\"$ROLE_ARN\",\"Input\":\"{}\"}]" \
     --region "$REGION" >/dev/null
 }
 
-# Auto-apply: 6 AM CT every day
-create_schedule "apply-pilot-auto-apply" "cron(0 6 * * ? *)" "$AUTO_APPLY_ARN"
+# Auto-apply: 12:00 UTC daily (7 AM CT during DST, 6 AM CT otherwise)
+create_rule "apply-pilot-auto-apply" "cron(0 12 * * ? *)" "$AUTO_APPLY_ARN"
 
-# Daily report: 8 PM CT every day
-create_schedule "apply-pilot-daily-report" "cron(0 20 * * ? *)" "$DAILY_REPORT_ARN"
+# Daily report: 02:00 UTC daily (9 PM CT during DST, 8 PM CT otherwise)
+create_rule "apply-pilot-daily-report" "cron(0 2 * * ? *)" "$DAILY_REPORT_ARN"
 
 echo ""
-echo "Schedules created:"
-echo "  apply-pilot-auto-apply    — 6 AM CT daily → $APP_URL/api/cron/auto-apply"
-echo "  apply-pilot-daily-report  — 8 PM CT daily → $APP_URL/api/cron/daily-report"
+echo "EventBridge Rules created:"
+echo "  apply-pilot-auto-apply    — 12:00 UTC daily → $APP_URL/api/cron/auto-apply"
+echo "  apply-pilot-daily-report  — 02:00 UTC daily → $APP_URL/api/cron/daily-report"
 echo ""
-echo "View: aws scheduler list-schedules --region $REGION"
-echo "Test manually: curl -H \"Authorization: Bearer \$CRON_SECRET\" $APP_URL/api/cron/auto-apply"
+echo "View:  aws events list-rules --region $REGION"
+echo "Test:  CRON_SECRET=\$(aws ssm get-parameter --name /apply-pilot/CRON_SECRET --with-decryption --query 'Parameter.Value' --output text --region $REGION)"
+echo "       curl -H \"Authorization: Bearer \$CRON_SECRET\" $APP_URL/api/cron/auto-apply"
