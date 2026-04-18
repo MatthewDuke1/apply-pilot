@@ -61,8 +61,8 @@ fi
 INSTANCE_ROLE_ARN=$(aws iam get-role --role-name "$INSTANCE_ROLE_NAME" --query 'Role.Arn' --output text)
 
 # ── Service config ─────────────────────────────────────────────
-# Runtime env vars pulled from SSM Parameter Store — only reference
-# secrets that actually exist, so missing optional ones don't break service creation.
+# Fetch secret values from SSM and materialize into env vars.
+# (Older AWS CLI versions don't support RuntimeEnvironmentSecrets.)
 CANDIDATE_SECRETS=(
   ANTHROPIC_API_KEY
   RAPIDAPI_KEY
@@ -72,17 +72,28 @@ CANDIDATE_SECRETS=(
   LINKEDIN_CLIENT_SECRET
 )
 
-SECRET_ARGS=()
+ENV_VAR_ARGS=()
+
+# Force Next.js to bind to all interfaces — App Runner injects the container's
+# EC2 hostname as HOSTNAME by default, which makes Next.js bind to that address
+# only, and the platform health check can't reach it.
+ENV_VAR_ARGS+=("\"HOSTNAME\":\"0.0.0.0\"")
+ENV_VAR_ARGS+=("\"PORT\":\"3000\"")
+
 for s in "${CANDIDATE_SECRETS[@]}"; do
-  if aws ssm get-parameter --name "/apply-pilot/$s" --region "$REGION" >/dev/null 2>&1; then
-    SECRET_ARGS+=("{\"Name\":\"$s\",\"Value\":\"arn:aws:ssm:$REGION:$ACCOUNT_ID:parameter/apply-pilot/$s\"}")
-    echo "  ✓ will inject $s from SSM"
+  VAL=$(aws ssm get-parameter --name "/apply-pilot/$s" --with-decryption --region "$REGION" --query 'Parameter.Value' --output text 2>/dev/null || true)
+  if [ -n "$VAL" ]; then
+    # Escape for JSON: backslash and quote
+    ESCAPED=${VAL//\\/\\\\}
+    ESCAPED=${ESCAPED//\"/\\\"}
+    ENV_VAR_ARGS+=("\"$s\":\"$ESCAPED\"")
+    echo "  ✓ injecting $s"
   else
     echo "  • skipping $s (not in Parameter Store)"
   fi
 done
 
-RUNTIME_SECRETS="[$(IFS=,; echo "${SECRET_ARGS[*]}")]"
+RUNTIME_ENV_VARS="{$(IFS=,; echo "${ENV_VAR_ARGS[*]}")}"
 
 SERVICE_CONFIG=$(cat <<EOF
 {
@@ -91,7 +102,7 @@ SERVICE_CONFIG=$(cat <<EOF
     "ImageRepositoryType": "ECR",
     "ImageConfiguration": {
       "Port": "3000",
-      "RuntimeEnvironmentSecrets": $RUNTIME_SECRETS
+      "RuntimeEnvironmentVariables": $RUNTIME_ENV_VARS
     }
   },
   "AutoDeploymentsEnabled": true,
