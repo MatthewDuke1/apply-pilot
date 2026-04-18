@@ -61,19 +61,28 @@ fi
 INSTANCE_ROLE_ARN=$(aws iam get-role --role-name "$INSTANCE_ROLE_NAME" --query 'Role.Arn' --output text)
 
 # ── Service config ─────────────────────────────────────────────
-# Runtime env vars pulled from SSM Parameter Store
-build_secret() {
-  echo "{\"Name\":\"$1\",\"Value\":\"arn:aws:ssm:$REGION:$ACCOUNT_ID:parameter/apply-pilot/$1\"}"
-}
+# Runtime env vars pulled from SSM Parameter Store — only reference
+# secrets that actually exist, so missing optional ones don't break service creation.
+CANDIDATE_SECRETS=(
+  ANTHROPIC_API_KEY
+  RAPIDAPI_KEY
+  RESEND_API_KEY
+  CRON_SECRET
+  LINKEDIN_CLIENT_ID
+  LINKEDIN_CLIENT_SECRET
+)
 
-RUNTIME_SECRETS=$(jq -c -n --argjson arr "[
-  $(build_secret ANTHROPIC_API_KEY),
-  $(build_secret RAPIDAPI_KEY),
-  $(build_secret RESEND_API_KEY),
-  $(build_secret CRON_SECRET),
-  $(build_secret LINKEDIN_CLIENT_ID),
-  $(build_secret LINKEDIN_CLIENT_SECRET)
-]" '$arr')
+SECRET_ARGS=()
+for s in "${CANDIDATE_SECRETS[@]}"; do
+  if aws ssm get-parameter --name "/apply-pilot/$s" --region "$REGION" >/dev/null 2>&1; then
+    SECRET_ARGS+=("{\"Name\":\"$s\",\"Value\":\"arn:aws:ssm:$REGION:$ACCOUNT_ID:parameter/apply-pilot/$s\"}")
+    echo "  ✓ will inject $s from SSM"
+  else
+    echo "  • skipping $s (not in Parameter Store)"
+  fi
+done
+
+RUNTIME_SECRETS="[$(IFS=,; echo "${SECRET_ARGS[*]}")]"
 
 SERVICE_CONFIG=$(cat <<EOF
 {
