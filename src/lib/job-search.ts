@@ -1,84 +1,102 @@
 import type { Job } from "./types";
 
 const RAPIDAPI_KEY = () => process.env.RAPIDAPI_KEY || "";
+const JSEARCH_HOST = "jsearch.p.rapidapi.com";
 
-export async function searchIndeed(
-  query: string,
-  location: string,
-  page = 1
-): Promise<Job[]> {
-  const key = RAPIDAPI_KEY();
-  if (!key) return demoJobs("indeed", query, location);
-
-  try {
-    const res = await fetch(
-      `https://indeed12.p.rapidapi.com/jobs/search?query=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}&page_id=${page}&locality=us&fromage=14&radius=50`,
-      {
-        headers: {
-          "x-rapidapi-key": key,
-          "x-rapidapi-host": "indeed12.p.rapidapi.com",
-        },
-      }
-    );
-    if (!res.ok) throw new Error(`Indeed API ${res.status}`);
-    const data = await res.json();
-
-    return (data.hits || []).map((hit: Record<string, unknown>) => ({
-      id: `indeed-${hit.id || crypto.randomUUID()}`,
-      title: String(hit.title || ""),
-      company: String(hit.company_name || ""),
-      location: String(hit.location || location),
-      salary: hit.salary_max ? `$${hit.salary_min}–$${hit.salary_max}` : undefined,
-      description: String(hit.description || ""),
-      posted_date: String(hit.date_creation || new Date().toISOString()),
-      source: "indeed" as const,
-      source_url: String(hit.link || ""),
-      company_careers_url: undefined,
-    }));
-  } catch (e) {
-    console.error("Indeed search failed:", e);
-    return demoJobs("indeed", query, location);
-  }
+interface JSearchJob {
+  job_id?: string;
+  job_title?: string;
+  employer_name?: string;
+  employer_website?: string;
+  employer_company_type?: string;
+  job_publisher?: string;
+  job_employment_type?: string;
+  job_apply_link?: string;
+  job_apply_is_direct?: boolean;
+  job_description?: string;
+  job_is_remote?: boolean;
+  job_posted_at_datetime_utc?: string;
+  job_city?: string;
+  job_state?: string;
+  job_country?: string;
+  job_min_salary?: number;
+  job_max_salary?: number;
+  job_salary_currency?: string;
+  job_salary_period?: string;
 }
 
-export async function searchLinkedIn(
+/**
+ * Search jobs via JSearch (RapidAPI) — aggregates Indeed, LinkedIn, Glassdoor,
+ * ZipRecruiter, and others into a single endpoint. Sorted by date by default.
+ */
+export async function searchJobs(
   query: string,
   location: string,
   page = 1
 ): Promise<Job[]> {
   const key = RAPIDAPI_KEY();
-  if (!key) return demoJobs("linkedin", query, location);
+  if (!key) return demoJobs(query, location);
+
+  // JSearch supports a single "query" param that combines role + location
+  const combinedQuery = location && location.toLowerCase() !== "remote"
+    ? `${query} in ${location}`
+    : query;
+
+  const params = new URLSearchParams({
+    query: combinedQuery,
+    page: String(page),
+    num_pages: "1",
+    date_posted: "week",         // last 7 days — fresher than Indeed's 14
+    country: "us",
+  });
+
+  if (location && location.toLowerCase() === "remote") {
+    params.set("work_from_home", "true");
+  }
 
   try {
     const res = await fetch(
-      `https://linkedin-jobs-search.p.rapidapi.com/?search_terms=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}&page=${page}&fetch_full_text=yes`,
+      `https://${JSEARCH_HOST}/search?${params.toString()}`,
       {
         headers: {
           "x-rapidapi-key": key,
-          "x-rapidapi-host": "linkedin-jobs-search.p.rapidapi.com",
+          "x-rapidapi-host": JSEARCH_HOST,
         },
       }
     );
-    if (!res.ok) throw new Error(`LinkedIn API ${res.status}`);
+    if (!res.ok) throw new Error(`JSearch API ${res.status}`);
     const data = await res.json();
+    const jobs: JSearchJob[] = Array.isArray(data?.data) ? data.data : [];
 
-    return (Array.isArray(data) ? data : []).map(
-      (job: Record<string, unknown>) => ({
-        id: `linkedin-${job.job_id || crypto.randomUUID()}`,
-        title: String(job.job_title || ""),
-        company: String(job.company_name || ""),
-        location: String(job.job_location || location),
-        salary: undefined,
-        description: String(job.job_description || ""),
-        posted_date: String(job.posted_date || new Date().toISOString()),
-        source: "linkedin" as const,
-        source_url: String(job.linkedin_job_url_cleaned || job.job_url || ""),
-        company_careers_url: String(job.company_url || ""),
-      })
-    );
+    return jobs.map((j) => {
+      const loc = [j.job_city, j.job_state].filter(Boolean).join(", ")
+        || (j.job_is_remote ? "Remote" : (j.job_country || location));
+
+      const salary = j.job_min_salary && j.job_max_salary
+        ? `$${Math.round(j.job_min_salary).toLocaleString()}–$${Math.round(j.job_max_salary).toLocaleString()}`
+        : undefined;
+
+      const publisher = (j.job_publisher || "").toLowerCase();
+      const source: Job["source"] = publisher.includes("indeed") ? "indeed"
+        : publisher.includes("linkedin") ? "linkedin"
+        : "direct";
+
+      return {
+        id: `jsearch-${j.job_id || crypto.randomUUID()}`,
+        title: j.job_title || "",
+        company: j.employer_name || "",
+        location: loc,
+        salary,
+        description: j.job_description || "",
+        posted_date: j.job_posted_at_datetime_utc || new Date().toISOString(),
+        source,
+        source_url: j.job_apply_link || "",
+        company_careers_url: j.employer_website || undefined,
+      };
+    });
   } catch (e) {
-    console.error("LinkedIn search failed:", e);
-    return demoJobs("linkedin", query, location);
+    console.error("JSearch failed:", e);
+    return demoJobs(query, location);
   }
 }
 
@@ -102,40 +120,40 @@ export async function resolveCareerPage(companyName: string): Promise<string> {
   return `https://www.google.com/search?q=${encodeURIComponent(companyName + " careers jobs apply")}`;
 }
 
-function demoJobs(source: "indeed" | "linkedin", query: string, location: string): Job[] {
+function demoJobs(query: string, location: string): Job[] {
   const now = new Date().toISOString();
   return [
     {
-      id: `${source}-demo-1`,
+      id: `jsearch-demo-1`,
       title: `Senior ${query}`,
       company: "Acme Corp",
       location,
       salary: "$150,000–$200,000",
       description: `We are looking for a Senior ${query} to join our growing team. You will lead cross-functional initiatives, define product roadmaps, and drive execution across engineering and design. Requirements: 5+ years in product management, strong analytical skills, experience with agile methodologies. This is a real opportunity with a dedicated hiring manager and a specific team.`,
       posted_date: now,
-      source,
-      source_url: `https://example.com/jobs/${source}-1`,
+      source: "direct",
+      source_url: "https://example.com/jobs/demo-1",
       company_careers_url: "https://careers.acme.com",
     },
     {
-      id: `${source}-demo-2`,
+      id: `jsearch-demo-2`,
       title: `${query} Lead`,
       company: "Globex Industries",
       location,
       description: `Globex Industries is always hiring talented individuals! We need someone who can do everything: product management, engineering, design, sales, marketing, data science, and machine learning. Must have 15+ years experience in all areas. PhD required. This role has been open for 6 months.`,
       posted_date: new Date(Date.now() - 45 * 86400000).toISOString(),
-      source,
-      source_url: `https://example.com/jobs/${source}-2`,
+      source: "direct",
+      source_url: "https://example.com/jobs/demo-2",
     },
     {
-      id: `${source}-demo-3`,
+      id: `jsearch-demo-3`,
       title: `${query} — AI Platform`,
       company: "Anthropic",
       location: "San Francisco, CA",
       salary: "$300,000–$400,000",
       description: `Join Anthropic's product team to shape the future of AI safety. You will own the roadmap for our API platform, work directly with researchers, and define how developers interact with Claude. Requirements: 5+ years PM experience, technical background (CS degree or equivalent), passion for AI safety. Team: Platform Product, reporting to VP Product.`,
       posted_date: now,
-      source,
+      source: "direct",
       source_url: "https://boards.greenhouse.io/anthropic",
       company_careers_url: "https://www.anthropic.com/careers",
     },

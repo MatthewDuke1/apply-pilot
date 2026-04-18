@@ -1,4 +1,4 @@
-import { searchIndeed, searchLinkedIn, resolveCareerPage } from "./job-search";
+import { searchJobs, resolveCareerPage } from "./job-search";
 import { scoreJobMatch, detectGhostJob, generateCoverLetter } from "./claude";
 import { getAutoApplyConfig, saveAutoApplyRun, getAppliedJobIds } from "./db";
 import type { Job, AutoApplyRun, AutoAppliedJob } from "./types";
@@ -33,15 +33,13 @@ export async function runAutoApply(): Promise<AutoApplyRun> {
     // 1. Get already-applied job IDs to avoid duplicates
     const appliedIds = await getAppliedJobIds();
 
-    // 2. Search for jobs across all configured queries
+    // 2. Search for jobs across all configured queries (JSearch aggregates
+    //    Indeed, LinkedIn, Glassdoor, ZipRecruiter in a single call per query)
     const allJobs: Job[] = [];
     for (const query of config.search_queries) {
       try {
-        const [indeedJobs, linkedInJobs] = await Promise.all([
-          searchIndeed(query, config.location),
-          searchLinkedIn(query, config.location),
-        ]);
-        allJobs.push(...indeedJobs, ...linkedInJobs);
+        const results = await searchJobs(query, config.location);
+        allJobs.push(...results);
       } catch (e) {
         run.errors.push(`Search failed for "${query}": ${e instanceof Error ? e.message : String(e)}`);
       }

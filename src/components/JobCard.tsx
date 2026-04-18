@@ -72,7 +72,9 @@ export default function JobCard({ job, resumeText, onSave, onApply }: Props) {
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-bold text-slate-800 text-base">{job.title}</h3>
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              job.source === "indeed" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+              job.source === "indeed" ? "bg-purple-100 text-purple-700" :
+              job.source === "linkedin" ? "bg-blue-100 text-blue-700" :
+              "bg-slate-100 text-slate-700"
             }`}>
               {job.source}
             </span>

@@ -10,7 +10,6 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
-  const [source, setSource] = useState("both");
 
   useEffect(() => {
     const r = store.getResume();
@@ -24,14 +23,14 @@ export default function JobsPage() {
   const search = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ q: query, location, source });
+      const params = new URLSearchParams({ q: query, location });
       const res = await fetch(`/api/jobs/search?${params}`);
       const data = await res.json();
       if (res.ok) setJobs(data.jobs);
     } finally {
       setLoading(false);
     }
-  }, [query, location, source]);
+  }, [query, location]);
 
   function saveJob(job: Job) {
     store.saveJob(job);
@@ -42,7 +41,7 @@ export default function JobsPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Find Jobs</h1>
         <p className="text-slate-500 mt-1">
-          Search Indeed and LinkedIn, get AI match scores, and apply directly to company career pages.
+          Search across Indeed, LinkedIn, Glassdoor, and more, get AI match scores, and apply directly to company career pages.
         </p>
       </div>
 
@@ -62,15 +61,6 @@ export default function JobsPage() {
             onChange={(e) => setLocation(e.target.value)}
             className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
-          <select
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            <option value="both">Indeed + LinkedIn</option>
-            <option value="indeed">Indeed only</option>
-            <option value="linkedin">LinkedIn only</option>
-          </select>
           <button
             onClick={search}
             disabled={loading || !query}
@@ -98,7 +88,7 @@ export default function JobsPage() {
       {loading && (
         <div className="text-center py-12">
           <div className="animate-spin w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full mx-auto mb-3" />
-          <p className="text-sm text-slate-500">Searching Indeed and LinkedIn...</p>
+          <p className="text-sm text-slate-500">Searching jobs across multiple sources...</p>
         </div>
       )}
 
