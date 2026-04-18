@@ -1,0 +1,32 @@
+# AWS App Runner service config
+# Docs: https://docs.aws.amazon.com/apprunner/latest/dg/config-file.html
+#
+# This file is used when deploying via source-code (GitHub connector) without
+# a Dockerfile. We include it for reference, but the recommended path is:
+# Dockerfile → ECR → App Runner (see DEPLOY.md).
+
+version: 1.0
+runtime: nodejs20
+
+build:
+  commands:
+    build:
+      - npm ci
+      - npm run build
+  env:
+    - name: NEXT_TELEMETRY_DISABLED
+      value: "1"
+
+run:
+  runtime-version: 20
+  command: node .next/standalone/server.js
+  network:
+    port: 3000
+    env: PORT
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: HOSTNAME
+      value: "0.0.0.0"
+  # Secrets are injected via App Runner's ValueSource from Parameter Store / Secrets Manager
+  # (configured at service creation time — see deploy/aws-setup.sh)
