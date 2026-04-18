@@ -1,0 +1,68 @@
+name: Deploy to ECR
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+# OIDC auth — no long-lived AWS keys stored in GitHub
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO: apply-pilot
+
+jobs:
+  build-and-push:
+    name: Build & push image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Fetch build-time secrets from Parameter Store
+        id: ssm
+        run: |
+          SUPABASE_URL=$(aws ssm get-parameter --name /apply-pilot/NEXT_PUBLIC_SUPABASE_URL --with-decryption --query 'Parameter.Value' --output text)
+          SUPABASE_KEY=$(aws ssm get-parameter --name /apply-pilot/NEXT_PUBLIC_SUPABASE_ANON_KEY --with-decryption --query 'Parameter.Value' --output text)
+          echo "::add-mask::$SUPABASE_URL"
+          echo "::add-mask::$SUPABASE_KEY"
+          echo "supabase_url=$SUPABASE_URL" >> "$GITHUB_OUTPUT"
+          echo "supabase_key=$SUPABASE_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ steps.ssm.outputs.supabase_url }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ steps.ssm.outputs.supabase_key }}
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Image pushed to ECR" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "App Runner auto-deploys from \`:latest\` — service should update within ~1 minute." >> $GITHUB_STEP_SUMMARY

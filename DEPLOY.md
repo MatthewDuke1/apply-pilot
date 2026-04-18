@@ -35,6 +35,20 @@ Email:   Resend (external)
 
 ## Step-by-step
 
+### 0. (Optional, one-time) Set up GitHub Actions auto-deploy
+
+If you want `git push` to master to rebuild + push the Docker image automatically, run this once:
+
+```bash
+GITHUB_REPO=MatthewDuke1/apply-pilot AWS_REGION=us-east-1 ./deploy/00-github-oidc.sh
+```
+
+This creates an OIDC provider + IAM role scoped to your repo, then prints the role ARN. Add it as a GitHub secret named `AWS_DEPLOY_ROLE_ARN` (the script shows the `gh` CLI command, or paste manually at `github.com/<owner>/<repo>/settings/secrets/actions`).
+
+After that, every push to `master` triggers [.github/workflows/deploy.yml](.github/workflows/deploy.yml) which builds the image, tags it with the commit SHA + `latest`, and pushes to ECR. App Runner (with `AutoDeploymentsEnabled: true`) picks up `:latest` and redeploys within ~1 minute — no manual steps.
+
+You can skip this if you prefer running `./deploy/02-ecr-push.sh` manually.
+
 ### 1. Store secrets in Parameter Store (free)
 
 ```bash
@@ -93,6 +107,9 @@ Then check the `/settings` page — you should see a new run in the history.
 
 ## Redeploying after code changes
 
+**With GitHub Actions (recommended):** just `git push`. The workflow builds, pushes to ECR, and App Runner auto-redeploys within ~1 min.
+
+**Manually:**
 ```bash
 ./deploy/02-ecr-push.sh
 ```
@@ -134,7 +151,7 @@ aws events delete-connection --name apply-pilot-cron
 aws ecr delete-repository --repository-name apply-pilot --force
 
 # Delete IAM roles (after services above are gone)
-for role in AppRunnerECRAccessRole-apply-pilot AppRunnerInstanceRole-apply-pilot EventBridgeSchedulerRole-apply-pilot; do
+for role in AppRunnerECRAccessRole-apply-pilot AppRunnerInstanceRole-apply-pilot EventBridgeSchedulerRole-apply-pilot GitHubActionsDeploy-apply-pilot; do
   aws iam delete-role --role-name $role || true
 done
 
