@@ -90,6 +90,12 @@ POLICY=$(cat <<EOF
       "Resource": "arn:aws:ecr:$REGION:$ACCOUNT_ID:repository/apply-pilot"
     },
     {
+      "Sid": "ECRCreateRepo",
+      "Effect": "Allow",
+      "Action": ["ecr:CreateRepository"],
+      "Resource": "*"
+    },
+    {
       "Sid": "SSMReadBuildVars",
       "Effect": "Allow",
       "Action": ["ssm:GetParameter", "ssm:GetParameters"],
