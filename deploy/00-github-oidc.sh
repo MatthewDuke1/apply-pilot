@@ -10,6 +10,10 @@
 
 set -euo pipefail
 
+# Git Bash path-translation fix for Windows
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 REGION="${AWS_REGION:-us-east-1}"
 GITHUB_REPO="${GITHUB_REPO:?Set GITHUB_REPO=owner/repo (e.g. MatthewDuke1/apply-pilot)}"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)

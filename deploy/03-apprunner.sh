@@ -6,6 +6,10 @@
 
 set -euo pipefail
 
+# Git Bash path-translation fix for Windows
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 REGION="${AWS_REGION:-us-east-1}"
 SERVICE_NAME="apply-pilot"
 REPO_NAME="apply-pilot"

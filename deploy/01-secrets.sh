@@ -9,6 +9,11 @@
 
 set -euo pipefail
 
+# Git Bash / MSYS2 on Windows auto-translates leading-slash args
+# into Windows paths when calling native exes like aws.exe — disable it.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 REGION="${AWS_REGION:-us-east-1}"
 PREFIX="/apply-pilot"
 
