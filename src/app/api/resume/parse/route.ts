@@ -34,8 +34,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ...analysis, raw_text: text });
   } catch (e) {
     console.error("Resume parse error:", e);
+    const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json(
-      { error: "Failed to parse resume. Check that ANTHROPIC_API_KEY is set." },
+      { error: `Failed to parse resume: ${message}` },
       { status: 500 }
     );
   }
