@@ -62,56 +62,43 @@ echo "Got $(echo "$RECORDS_JSON" | python -c 'import sys,json; print(len(json.lo
 echo ""
 
 # ── Build Route 53 change batch ──────────────────────────────────
-# 1) Apex A record → ALIAS to App Runner service
-# 2) www CNAME → apex
-# 3) Certificate validation CNAMEs (one per record App Runner returned)
-APP_RUNNER_HOSTED_ZONE_ID="Z01915732ZBZKC8D3X21Q" # App Runner us-east-1
+# Route 53 doesn't support ALIAS records to App Runner services directly
+# (no stable hosted-zone ID for App Runner). Instead:
+#   1) www.{domain} CNAME → App Runner service URL
+#   2) {domain} apex ALIAS A → www.{domain} (same-zone alias, Route 53 extension)
+#   3) Certificate validation CNAMEs (one per record App Runner returned)
 
-python - "$DOMAIN" "$SERVICE_URL" "$APP_RUNNER_HOSTED_ZONE_ID" <<'PY' "$RECORDS_JSON" > /tmp/change-batch.json
-import json, sys
-domain, service_url, arzone = sys.argv[1], sys.argv[2], sys.argv[3]
-records = json.loads(sys.argv[4])
+DOMAIN_ENV="$DOMAIN" \
+SERVICE_URL_ENV="$SERVICE_URL" \
+ZONE_ID_ENV="$ZONE_ID" \
+RECORDS_ENV="$RECORDS_JSON" \
+python - > ./change-batch.json <<'PY'
+import json, os
+domain = os.environ["DOMAIN_ENV"]
+service_url = os.environ["SERVICE_URL_ENV"]
+zone_id = os.environ["ZONE_ID_ENV"]
+records = json.loads(os.environ["RECORDS_ENV"])
 
 changes = [
-    {
-        "Action": "UPSERT",
-        "ResourceRecordSet": {
-            "Name": domain,
-            "Type": "A",
-            "AliasTarget": {
-                "DNSName": service_url,
-                "HostedZoneId": arzone,
-                "EvaluateTargetHealth": False
-            }
-        }
-    },
-    {
-        "Action": "UPSERT",
-        "ResourceRecordSet": {
-            "Name": f"www.{domain}",
-            "Type": "CNAME",
-            "TTL": 300,
-            "ResourceRecords": [{"Value": domain}]
-        }
-    },
+    {"Action": "UPSERT", "ResourceRecordSet": {
+        "Name": "www." + domain, "Type": "CNAME", "TTL": 300,
+        "ResourceRecords": [{"Value": service_url}]
+    }},
+    {"Action": "UPSERT", "ResourceRecordSet": {
+        "Name": domain, "Type": "A",
+        "AliasTarget": {"DNSName": "www." + domain, "HostedZoneId": zone_id, "EvaluateTargetHealth": False}
+    }},
 ]
-
 for r in records:
-    changes.append({
-        "Action": "UPSERT",
-        "ResourceRecordSet": {
-            "Name": r["Name"],
-            "Type": r["Type"],
-            "TTL": 300,
-            "ResourceRecords": [{"Value": r["Value"]}]
-        }
-    })
-
+    changes.append({"Action": "UPSERT", "ResourceRecordSet": {
+        "Name": r["Name"], "Type": r["Type"], "TTL": 300,
+        "ResourceRecords": [{"Value": r["Value"]}]
+    }})
 print(json.dumps({"Changes": changes}))
 PY
 
 echo "Applying Route 53 change batch..."
-CHANGE_ID=$(aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch file:///tmp/change-batch.json --query 'ChangeInfo.Id' --output text)
+CHANGE_ID=$(aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch file://./change-batch.json --query 'ChangeInfo.Id' --output text)
 echo "Change ID: $CHANGE_ID"
 echo ""
 
