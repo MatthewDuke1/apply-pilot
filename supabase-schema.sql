@@ -47,11 +47,9 @@ create index if not exists idx_runs_started_at on ap_auto_apply_runs(started_at 
 create index if not exists idx_applied_jobs_run_id on ap_auto_applied_jobs(run_id);
 create index if not exists idx_applied_jobs_applied_at on ap_auto_applied_jobs(applied_at desc);
 
--- RLS policies (allow all operations with anon key for single-user setup)
+-- RLS enabled with NO policies for anon/authenticated roles. All access goes
+-- through the server-side service_role key, which bypasses RLS entirely. This
+-- means the Supabase anon key is useless against these tables even if leaked.
 alter table ap_auto_apply_config enable row level security;
 alter table ap_auto_apply_runs enable row level security;
 alter table ap_auto_applied_jobs enable row level security;
-
-create policy "Allow all on config" on ap_auto_apply_config for all using (true) with check (true);
-create policy "Allow all on runs" on ap_auto_apply_runs for all using (true) with check (true);
-create policy "Allow all on applied jobs" on ap_auto_applied_jobs for all using (true) with check (true);

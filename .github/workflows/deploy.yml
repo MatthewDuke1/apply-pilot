@@ -36,16 +36,6 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Fetch build-time secrets from Parameter Store
-        id: ssm
-        run: |
-          SUPABASE_URL=$(aws ssm get-parameter --name /apply-pilot/NEXT_PUBLIC_SUPABASE_URL --with-decryption --query 'Parameter.Value' --output text)
-          SUPABASE_KEY=$(aws ssm get-parameter --name /apply-pilot/NEXT_PUBLIC_SUPABASE_ANON_KEY --with-decryption --query 'Parameter.Value' --output text)
-          echo "::add-mask::$SUPABASE_URL"
-          echo "::add-mask::$SUPABASE_KEY"
-          echo "supabase_url=$SUPABASE_URL" >> "$GITHUB_OUTPUT"
-          echo "supabase_key=$SUPABASE_KEY" >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -55,9 +45,6 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          build-args: |
-            NEXT_PUBLIC_SUPABASE_URL=${{ steps.ssm.outputs.supabase_url }}
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ steps.ssm.outputs.supabase_key }}
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ github.sha }}

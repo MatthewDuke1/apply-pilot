@@ -1,9 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+// Server-only Supabase client using the service-role key. This bypasses RLS
+// and must NEVER be imported from client components or pages. It's safe because
+// db.ts (and everything that imports it) only runs in Node inside API routes
+// and server-side functions.
+const url = process.env.SUPABASE_URL || "";
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-export const supabase = url && key ? createClient(url, key) : null;
+export const supabase = url && key
+  ? createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+  : null;
 
 export const TABLES = {
   resumes: "ap_resumes",

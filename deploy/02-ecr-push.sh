@@ -23,10 +23,6 @@ echo "Repo:     $ECR_URI"
 echo "Tag:      $TAG"
 echo "---"
 
-# Fetch build-time secrets for NEXT_PUBLIC_* vars (baked into JS bundle)
-SUPABASE_URL=$(aws ssm get-parameter --name "/apply-pilot/NEXT_PUBLIC_SUPABASE_URL" --with-decryption --region "$REGION" --query 'Parameter.Value' --output text)
-SUPABASE_KEY=$(aws ssm get-parameter --name "/apply-pilot/NEXT_PUBLIC_SUPABASE_ANON_KEY" --with-decryption --region "$REGION" --query 'Parameter.Value' --output text)
-
 # Create ECR repo if it doesn't exist
 aws ecr describe-repositories --repository-names "$REPO_NAME" --region "$REGION" >/dev/null 2>&1 \
   || aws ecr create-repository --repository-name "$REPO_NAME" --region "$REGION" --image-scanning-configuration scanOnPush=true >/dev/null
@@ -38,8 +34,6 @@ aws ecr get-login-password --region "$REGION" | docker login --username AWS --pa
 echo "Building image..."
 docker buildx build \
   --platform linux/amd64 \
-  --build-arg NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL" \
-  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_KEY" \
   -t "$ECR_URI:$TAG" \
   -t "$ECR_URI:latest" \
   --push \
