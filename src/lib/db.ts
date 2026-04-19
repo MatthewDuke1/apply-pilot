@@ -15,14 +15,22 @@ export async function getAutoApplyConfig(): Promise<AutoApplyConfig | null> {
   return {
     ...data,
     search_queries: data.search_queries || [],
-    errors: [],
   } as AutoApplyConfig;
 }
 
 export async function upsertAutoApplyConfig(config: AutoApplyConfig): Promise<AutoApplyConfig> {
   if (!supabase) throw new Error("Supabase not configured");
+  // Whitelist columns that exist in the table; drops stray fields (e.g. errors)
+  // that a client might echo back after round-tripping the GET response.
   const payload = {
-    ...config,
+    enabled: config.enabled,
+    daily_limit: config.daily_limit,
+    min_match_score: config.min_match_score,
+    search_queries: config.search_queries,
+    location: config.location,
+    report_email: config.report_email,
+    resume_text: config.resume_text,
+    resume_name: config.resume_name,
     updated_at: new Date().toISOString(),
   };
   if (config.id) {

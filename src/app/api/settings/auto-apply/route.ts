@@ -19,10 +19,13 @@ export async function GET() {
 
     return NextResponse.json({ config, runs: hydratedRuns });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Unknown error" },
-      { status: 500 }
-    );
+    console.error("Settings API error:", e);
+    const message = e instanceof Error
+      ? e.message
+      : typeof e === "object" && e !== null && "message" in e
+        ? String((e as { message: unknown }).message)
+        : JSON.stringify(e);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -32,9 +35,12 @@ export async function PUT(req: Request) {
     const config = await upsertAutoApplyConfig(body);
     return NextResponse.json({ config });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Unknown error" },
-      { status: 500 }
-    );
+    console.error("Settings API error:", e);
+    const message = e instanceof Error
+      ? e.message
+      : typeof e === "object" && e !== null && "message" in e
+        ? String((e as { message: unknown }).message)
+        : JSON.stringify(e);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

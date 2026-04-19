@@ -9,6 +9,18 @@ function getClient(): Anthropic {
   return client;
 }
 
+// Claude sometimes wraps JSON in ```json ... ``` despite our prompt asking
+// for raw JSON. Strip fences before parsing so callers don't 500.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseJsonResponse(text: string): any {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+  return JSON.parse(cleaned);
+}
+
 export async function analyzeResume(text: string) {
   const msg = await getClient().messages.create({
     model: "claude-sonnet-4-20250514",
@@ -38,7 +50,7 @@ ${text}`,
   });
   const content = msg.content[0];
   if (content.type !== "text") throw new Error("Unexpected response type");
-  return JSON.parse(content.text);
+  return parseJsonResponse(content.text);
 }
 
 export async function scoreJobMatch(resumeText: string, jobDescription: string) {
@@ -67,7 +79,7 @@ ${jobDescription}`,
   });
   const content = msg.content[0];
   if (content.type !== "text") throw new Error("Unexpected response type");
-  return JSON.parse(content.text);
+  return parseJsonResponse(content.text);
 }
 
 export async function generateCoverLetter(
@@ -141,5 +153,5 @@ ${jobDescription}`,
   });
   const content = msg.content[0];
   if (content.type !== "text") throw new Error("Unexpected response type");
-  return JSON.parse(content.text);
+  return parseJsonResponse(content.text);
 }
